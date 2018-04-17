@@ -4,14 +4,16 @@ import java.io.UnsupportedEncodingException;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
-import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.json.JsonConverter;
 
 import com.amazonaws.services.kinesisfirehose.model.Record;
 
@@ -19,7 +21,7 @@ public class DataUtility {
 
 	/**
 	 * Parses Kafka Values
-	 * 
+	 *
 	 * @param schema
 	 *            - Schema of passed message as per
 	 *            https://kafka.apache.org/0100/javadoc/org/apache/kafka/connect/data/Schema.html
@@ -90,24 +92,24 @@ public class DataUtility {
 			// TO BE IMPLEMENTED
 			return ByteBuffer.wrap(null);
 		case STRUCT:
+			JsonConverter converter = new JsonConverter();
+			Map<String, Object> converterConfig = new HashMap<>();
+			converterConfig.put("schemas.enable", "false");
+			converterConfig.put("schemas.cache.size", "1000");
+			converter.configure(converterConfig, false);
 
-			List<ByteBuffer> fieldList = new LinkedList<ByteBuffer>();
-			// Parsing each field of structure
-			schema.fields().forEach(field -> fieldList.add(parseValue(field.schema(), ((Struct) value).get(field))));
-			// Initialize ByteBuffer
-			ByteBuffer processedValue = ByteBuffer.allocate(fieldList.stream().mapToInt(Buffer::remaining).sum());
-			// Combine bytebuffer of all fields
-			fieldList.forEach(buffer -> processedValue.put(buffer.duplicate()));
-
-			return processedValue;
-
+			// Use JsonCoverter to stringify into JSON
+			// Since we are only interested into the JSON string of record value,
+			// we supply empty string into topic and simply don't care about
+			byte[] rawJson = converter.fromConnectData("", schema, value);
+			return ByteBuffer.wrap(rawJson);
 		}
 		return null;
 	}
 
 	/**
 	 * Converts Kafka record into Kinesis record
-	 * 
+	 *
 	 * @param sinkRecord
 	 *            Kafka unit of message
 	 * @return Kinesis unit of message
